@@ -58,4 +58,4 @@ bcftools call -vc -Ov --ploidy 1 my-raw.bcf > my-raw.vcf
 ##Filter SNPs
 ###Quality score above 20
 bcftools filter -i 'TYPE="snp" && QUAL>20' my-raw.vcf > step1.vcf
-vcfutils.pl varFilter step1.vcf > OUTPUT.vcf
+vcfutils.pl varFilter -D100 step1.vcf > OUTPUT.vcf
