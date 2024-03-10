@@ -14,7 +14,9 @@ module load Anaconda3//2020.11
 source activate $DATA/myenv
 
 #Louis Bell-Roberts
-#SNP calling pipeline - place script within working directory containing the WGS reads, reference sequence and Truseq file
+#SNP calling pipeline - place script within working directory containing the WGS reads, reference sequence and Truseq file. Set job name.
+##Truseq file - specify whether single or paired reads. This will also alter the SNP calling script.
+###Must specify ploidy
 
 #Create a file with all sample names derived from the prefix of the fastq files in the working directory
 ##Names used for parallel computation
@@ -34,15 +36,16 @@ LEADING:3 TRAILING:3 SLIDINGWINDOW:4:20 MINLEN:36 CROP:150"
 ###########BWA###################################
 ##Align paired-end reads to the reference sequence using parallel computation
 ##Use wildcard to identify the reference sequence and index it
-bwa index *.fna
-cat names.txt | parallel -t "bwa aln *.fna {}_1_out_paired.fq.gz > {}_1.sai"
-cat names.txt | parallel -t "bwa aln *.fna {}_2_out_paired.fq.gz > {}_2.sai"
-cat names.txt | parallel -t "bwa sampe *.fna {}_1.sai {}_2.sai {}_1_out_paired.fq.gz {}_2_out_paired.fq.gz > {}_1_aln.sam"
+refseq=$(echo *.fna)
+bwa index $refseq
+cat names.txt | parallel -t "bwa aln $refseq {}_1_out_paired.fq.gz > {}_1.sai"
+cat names.txt | parallel -t "bwa aln $refseq {}_2_out_paired.fq.gz > {}_2.sai"
+cat names.txt | parallel -t "bwa sampe $refseq {}_1.sai {}_2.sai {}_1_out_paired.fq.gz {}_2_out_paired.fq.gz > {}_1_aln.sam"
 
 ###########SAMTOOLS########################
 ##Indexes the reference genome
 ##Convert SAM to BAM format, sort BAM files, and create index files for sorted BAM files
-samtools faidx *.fna
+samtools faidx $refseq
 cat names.txt | parallel -t "samtools view -S -b {}_1_aln.sam > {}_1_aln.bam"
 cat names.txt | parallel -t "samtools sort -o sorted{}_1.bam {}_1_aln.bam"
 cat names.txt | parallel -t "samtools index sorted{}_1.bam"
@@ -50,7 +53,7 @@ cat names.txt | parallel -t "samtools index sorted{}_1.bam"
 ###########BCFTOOLS########################
 ##Call variants from the aligned sequence data
 ##Create a pileup file using the sample names stored in names.txt. Length determined by the number of names
-bcftools mpileup -f *.fna $(cat names.txt | xargs -I{} echo "sorted{}_1.bam") > my-raw.bcf
+bcftools mpileup -f $refseq $(cat names.txt | xargs -I{} echo "sorted{}_1.bam") > my-raw.bcf
 
 ##SNP calling
 bcftools call -vc -Ov --ploidy 1 my-raw.bcf > my-raw.vcf
@@ -58,4 +61,4 @@ bcftools call -vc -Ov --ploidy 1 my-raw.bcf > my-raw.vcf
 ##Filter SNPs
 ###Quality score above 20
 bcftools filter -i 'TYPE="snp" && QUAL>20' my-raw.vcf > step1.vcf
-vcfutils.pl varFilter -D100 step1.vcf > OUTPUT.vcf
+vcfutils.pl varFilter step1.vcf > OUTPUT.vcf
